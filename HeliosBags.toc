@@ -1,0 +1,14 @@
+## Interface: 50400
+## Title: HeliosBags
+## Notes: Unified, searchable, category-based bags for Mists of Pandaria 5.4.8.
+## Author: HeliosBags Contributors
+## Version: 1.4.3-alpha
+## SavedVariables: HeliosBagsDB
+## SavedVariablesPerCharacter: HeliosBagsCharacterDB
+
+Core.lua
+Categories.lua
+Inventory.lua
+Upgrades.lua
+UI.lua
+Settings.lua
