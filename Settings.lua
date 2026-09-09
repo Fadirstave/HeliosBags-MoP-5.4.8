@@ -123,6 +123,7 @@ function Settings:CreateMainPanel(parent)
     HB.profile.showUpgrades = true
     HB.profile.categoryView = true
     HB.profile.locked = false
+    HB.profile.collapsedCategories = {}
     if HB.UI then HB.UI:Refresh() end
   end
   InterfaceOptions_AddCategory(panel, true)
@@ -153,7 +154,10 @@ function Settings:SaveCategory()
   end
 
   if self.selectedCategory and self.selectedCategory ~= name then
+    local wasCollapsed = HB.profile.collapsedCategories[self.selectedCategory]
     HB.profile.customCategories[self.selectedCategory] = nil
+    HB.profile.collapsedCategories[self.selectedCategory] = nil
+    if wasCollapsed then HB.profile.collapsedCategories[name] = true end
     for index, value in ipairs(HB.profile.categoryOrder) do
       if value == self.selectedCategory then HB.profile.categoryOrder[index] = name end
     end
@@ -179,6 +183,7 @@ function Settings:DeleteCategory()
     return
   end
   HB.profile.customCategories[name] = nil
+  HB.profile.collapsedCategories[name] = nil
   RemoveFromOrder(name)
   self.selectedCategory = nil
   self.categoryName:SetText("")

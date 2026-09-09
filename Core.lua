@@ -2,7 +2,7 @@ local ADDON_NAME, HB = ...
 
 HeliosBags = HB
 HB.name = ADDON_NAME
-HB.version = "1.4.3-alpha"
+HB.version = "1.5.0-alpha"
 HB.events = CreateFrame("Frame")
 HB.modules = {}
 HB.moduleOrder = {}
@@ -27,6 +27,7 @@ local defaults = {
     },
     customCategories = {},
     itemOverrides = {},
+    collapsedCategories = {},
   },
   characters = {},
 }

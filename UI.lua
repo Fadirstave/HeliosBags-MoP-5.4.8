@@ -41,6 +41,13 @@ local function CreateItemButton(parent, index)
   upgradeGlow:Hide()
   button.upgradeGlow = upgradeGlow
   button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+  button:RegisterForDrag("LeftButton")
+  local function PickupItem(self)
+    if not self.item or self.item.empty or not self.item.bag or self.item.locked then return end
+    PickupContainerItem(self.item.bag, self.item.slot)
+  end
+  button:SetScript("OnDragStart", PickupItem)
+  button:SetScript("OnReceiveDrag", PickupItem)
   button:SetScript("OnEnter", function(self)
     UI.hoveredButton = self
     UI:ShowItemTooltip(self)
@@ -337,6 +344,17 @@ function UI:Hide()
   self.layoutFrozen = false
 end
 
+function UI:IsCategoryCollapsed(category)
+  return self.search == "" and HB.profile.collapsedCategories[category] == true
+end
+
+function UI:ToggleCategory(category)
+  if not category or self.search ~= "" then return end
+  HB.profile.collapsedCategories[category] = not HB.profile.collapsedCategories[category] or nil
+  self.layoutFrozen = false
+  self:Refresh(true)
+end
+
 local equipmentOrder = {
   INVTYPE_HEAD = 1, INVTYPE_NECK = 2, INVTYPE_SHOULDER = 3, INVTYPE_CLOAK = 4,
   INVTYPE_CHEST = 5, INVTYPE_ROBE = 5, INVTYPE_WRIST = 6, INVTYPE_HAND = 7,
@@ -513,34 +531,31 @@ end
 function UI:GetLiveGroupedItems()
   local live = {}
   local emptyCount = 0
-  for _, entry in ipairs(self:GetCategorizedItems()) do
-    local item, category = entry.item, entry.category
-    if item.empty then
-      emptyCount = emptyCount + 1
-    else
-      local itemKey = item.link or tostring(item.itemID or item.name or "")
-      local key = category .. "\031" .. itemKey
-      local current = live[key]
-      if not current then
-        current = {}
-        for field, value in pairs(item) do current[field] = value end
-        current.count = 0
-        current.stacks = {}
-        current.groupKey = key
-        current.category = category
-        live[key] = current
+  local totalGroups = 0
+  local totalQuantity = 0
+  local grouped, order = self:GetGroupedItems()
+  for _, category in ipairs(order) do
+    local items = grouped[category]
+    if items and #items > 0 then
+      totalGroups = totalGroups + #items
+      for _, item in ipairs(items) do
+        totalQuantity = totalQuantity + (item.empty and 0 or item.count or 1)
+        if not self:IsCategoryCollapsed(category) then
+          if item.empty then
+            emptyCount = item.count or 0
+          else
+            item.category = category
+            live[item.groupKey] = item
+          end
+        end
       end
-      current.count = current.count + (item.count or 1)
-      current.stacks[#current.stacks + 1] = { bag = item.bag, slot = item.slot, count = item.count or 1 }
     end
   end
-  return live, emptyCount
+  return live, emptyCount, totalGroups, totalQuantity
 end
 
 function UI:RefreshFrozenItems()
-  local live, emptyCount = self:GetLiveGroupedItems()
-  local quantity = 0
-  local groups = 0
+  local live, emptyCount, totalGroups, totalQuantity = self:GetLiveGroupedItems()
   local displayed = {}
 
   for _, button in ipairs(self.buttons) do
@@ -560,8 +575,6 @@ function UI:RefreshFrozenItems()
         local item = live[button.groupKey]
         if item then
           self:RenderButton(button, item)
-          quantity = quantity + (item.count or 1)
-          groups = groups + 1
         else
           self:RenderButton(button, { empty = true, frozen = true })
         end
@@ -570,14 +583,27 @@ function UI:RefreshFrozenItems()
       end
     end
   end
-  self.status:SetText(groups .. " groups  •  " .. quantity .. " items")
+  self.status:SetText(totalGroups .. " groups  •  " .. totalQuantity .. " items")
   self:UpdateFooter()
 end
 
 function UI:GetHeader(index)
   if self.headers[index] then return self.headers[index] end
-  local header = self.content:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  header:SetJustifyH("LEFT")
+  local header = CreateFrame("Button", nil, self.content)
+  header:RegisterForClicks("LeftButtonUp")
+  header:SetHighlightTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight", "ADD")
+  local arrow = header:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  arrow:SetPoint("LEFT", 1, 0)
+  arrow:SetWidth(11)
+  arrow:SetJustifyH("LEFT")
+  header.arrow = arrow
+  local label = header:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  label:SetPoint("LEFT", arrow, "RIGHT", 1, 0)
+  label:SetPoint("RIGHT", header, "RIGHT", -2, 0)
+  label:SetJustifyH("LEFT")
+  label:SetWordWrap(false)
+  header.label = label
+  header:SetScript("OnClick", function(button) self:ToggleCategory(button.category) end)
   self.headers[index] = header
   return header
 end
@@ -620,12 +646,18 @@ function UI:Refresh(forceLayout)
   local targetWidth = maxColumns * cell - spacing
   local xPad, y = 4, -4
   local buttonIndex, headerIndex, separatorIndex = 1, 1, 1
-  local visible, totalQuantity = 0, 0
+  local totalGroups, totalQuantity = 0, 0
 
   local visibleCategories = 0
   for _, category in ipairs(order) do
     local list = groups[category]
-    if list and #list > 0 then visibleCategories = visibleCategories + 1 end
+    if list and #list > 0 then
+      visibleCategories = visibleCategories + 1
+      totalGroups = totalGroups + #list
+      for _, item in ipairs(list) do
+        totalQuantity = totalQuantity + (item.empty and 0 or item.count or 1)
+      end
+    end
   end
 
   local categoryIndex = 0
@@ -633,37 +665,39 @@ function UI:Refresh(forceLayout)
     local list = groups[category]
     if list and #list > 0 then
       categoryIndex = categoryIndex + 1
+      local collapsed = self:IsCategoryCollapsed(category)
       local columns = math.max(1, math.min(maxColumns, #list))
-      local itemRows = math.ceil(#list / columns)
-      local categoryHeight = headerHeight + itemRows * cell - spacing
+      local itemRows = collapsed and 0 or math.ceil(#list / columns)
+      local categoryHeight = headerHeight
+      if itemRows > 0 then categoryHeight = categoryHeight + itemRows * cell - spacing end
 
       local header = self:GetHeader(headerIndex)
       headerIndex = headerIndex + 1
       header:ClearAllPoints()
       header:SetPoint("TOPLEFT", xPad, y)
-      header:SetWidth(targetWidth)
-      header:SetWordWrap(false)
-      header:SetJustifyH("LEFT")
+      header:SetSize(targetWidth, headerHeight)
+      header.category = category
       local categoryCount = (#list == 1 and list[1].empty and list[1].count) or #list
-      header:SetText(category .. "  |cff8296a8" .. categoryCount .. "|r")
+      header.arrow:SetText(collapsed and ">" or "v")
+      header.label:SetText(category .. "  |cff8296a8" .. categoryCount .. "|r")
       header:Show()
 
-      for index, item in ipairs(list) do
-        local button = self.buttons[buttonIndex]
-        if not button then break end
-        buttonIndex = buttonIndex + 1
-        visible = visible + 1
-        totalQuantity = totalQuantity + (item.empty and 0 or item.count or 1)
-        local col = (index - 1) % columns
-        local itemRow = math.floor((index - 1) / columns)
-        button:ClearAllPoints()
-        button:SetPoint("TOPLEFT", xPad + col * cell, y - headerHeight - itemRow * cell)
-        button:SetSize(size, size)
-        button.groupKey = item.groupKey
-        button.isEmptySummary = item.empty and true or nil
-        button.category = category
-        self:RenderButton(button, item)
-        button:Show()
+      if not collapsed then
+        for index, item in ipairs(list) do
+          local button = self.buttons[buttonIndex]
+          if not button then break end
+          buttonIndex = buttonIndex + 1
+          local col = (index - 1) % columns
+          local itemRow = math.floor((index - 1) / columns)
+          button:ClearAllPoints()
+          button:SetPoint("TOPLEFT", xPad + col * cell, y - headerHeight - itemRow * cell)
+          button:SetSize(size, size)
+          button.groupKey = item.groupKey
+          button.isEmptySummary = item.empty and true or nil
+          button.category = category
+          self:RenderButton(button, item)
+          button:Show()
+        end
       end
 
       y = y - categoryHeight
@@ -690,7 +724,7 @@ function UI:Refresh(forceLayout)
   self.content:SetSize(contentWidth, contentHeight)
   self.frame:SetScale(fitScale)
   self.frame:SetSize(frameWidth, frameHeight)
-  self.status:SetText(visible .. " groups  •  " .. totalQuantity .. " items")
+  self.status:SetText(totalGroups .. " groups  •  " .. totalQuantity .. " items")
   self:UpdateMoney()
   self:UpdateFooter()
   self.title:SetText("HeliosBags " .. HB.version .. " — Bags")
