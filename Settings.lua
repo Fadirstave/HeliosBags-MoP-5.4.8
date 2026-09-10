@@ -79,33 +79,53 @@ function Settings:CreateMainPanel(parent)
     function() return HB.profile.showUpgrades end,
     function(value) HB.profile.showUpgrades = value end)
 
-  AddLabel(panel, "Flexible layout", 16, -216, "GameFontNormalLarge")
-  AddCheckBox(panel, "HeliosBagsAutoLayoutCheck", "Automatically fit the configured bag width to the screen", 12, -244,
+  AddLabel(panel, "Appearance", 334, -76, "GameFontNormalLarge")
+  AddCheckBox(panel, "HeliosBagsDarkModeCheck", "Dark UI mode", 326, -104,
+    function() return HB.profile.darkMode end,
+    function(value)
+      HB.profile.darkMode = value
+      if HB.UI then HB.UI:ApplyAppearance() end
+    end)
+  AddCheckBox(panel, "HeliosBagsNeutralBackgroundCheck", "Use a neutral background", 326, -136,
+    function() return HB.profile.neutralBackground end,
+    function(value)
+      HB.profile.neutralBackground = value
+      if HB.UI then HB.UI:ApplyAppearance() end
+    end)
+  AddSlider(panel, "HeliosBagsBackgroundAlphaSlider", "Background opacity", 332, -198, 0.2, 1, 0.05,
+    function() return HB.profile.backgroundAlpha end,
+    function(value)
+      HB.profile.backgroundAlpha = value
+      if HB.UI then HB.UI:ApplyAppearance() end
+    end)
+
+  AddLabel(panel, "Flexible layout", 16, -246, "GameFontNormalLarge")
+  AddCheckBox(panel, "HeliosBagsAutoLayoutCheck", "Automatically fit the configured bag width to the screen", 12, -274,
     function() return HB.profile.autoLayout end,
     function(value) HB.profile.autoLayout = value end)
 
-  AddSlider(panel, "HeliosBagsColumnsSlider", "Bag width (items)", 20, -306, 4, 16, 1,
+  AddSlider(panel, "HeliosBagsColumnsSlider", "Bag width (items)", 20, -336, 4, 16, 1,
     function() return HB.profile.sectionItemColumns end,
     function(value) HB.profile.sectionItemColumns = value end)
-  AddSlider(panel, "HeliosBagsSizeSlider", "Item size", 300, -306, 26, 48, 1,
+  AddSlider(panel, "HeliosBagsSizeSlider", "Item size", 300, -336, 26, 48, 1,
     function() return HB.profile.buttonSize end,
     function(value) HB.profile.buttonSize = value end)
-  AddSlider(panel, "HeliosBagsSpacingSlider", "Item spacing", 20, -381, 1, 10, 1,
+  AddSlider(panel, "HeliosBagsSpacingSlider", "Item spacing", 20, -411, 1, 10, 1,
     function() return HB.profile.buttonSpacing end,
     function(value) HB.profile.buttonSpacing = value end)
-  AddSlider(panel, "HeliosBagsScaleSlider", "Window scale", 300, -381, 0.6, 1.2, 0.05,
+  AddSlider(panel, "HeliosBagsScaleSlider", "Window scale", 300, -411, 0.6, 1.2, 0.05,
     function() return HB.profile.scale end,
     function(value) HB.profile.scale = value end)
 
   local categories = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
   categories:SetSize(170, 24)
-  categories:SetPoint("TOPLEFT", 20, -446)
+  categories:SetPoint("TOPLEFT", 20, -476)
   categories:SetText("Manage categories")
   categories:SetScript("OnClick", function() self:OpenCategories() end)
 
   local reset = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
   reset:SetSize(170, 24)
-  reset:SetPoint("TOPLEFT", 300, -446)
+  reset:SetPoint("TOPLEFT", 300, -476)
   reset:SetText("Reset window position")
   reset:SetScript("OnClick", function()
     HB.profile.position = { point = "BOTTOMRIGHT", x = -42, y = 110 }
@@ -123,7 +143,11 @@ function Settings:CreateMainPanel(parent)
     HB.profile.showUpgrades = true
     HB.profile.categoryView = true
     HB.profile.locked = false
+    HB.profile.darkMode = true
+    HB.profile.neutralBackground = false
+    HB.profile.backgroundAlpha = 0.98
     HB.profile.collapsedCategories = {}
+    if HB.UI then HB.UI:ApplyAppearance() end
     if HB.UI then HB.UI:Refresh() end
   end
   InterfaceOptions_AddCategory(panel, true)

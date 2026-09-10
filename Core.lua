@@ -2,7 +2,7 @@ local ADDON_NAME, HB = ...
 
 HeliosBags = HB
 HB.name = ADDON_NAME
-HB.version = "1.5.0-alpha"
+HB.version = "1.6.0-alpha"
 HB.events = CreateFrame("Frame")
 HB.modules = {}
 HB.moduleOrder = {}
@@ -20,6 +20,9 @@ local defaults = {
     showEmpty = true,
     showUpgrades = true,
     locked = false,
+    darkMode = true,
+    neutralBackground = false,
+    backgroundAlpha = 0.98,
     recentBagOpens = 3,
     position = { point = "BOTTOMRIGHT", x = -42, y = 110 },
     categoryOrder = {

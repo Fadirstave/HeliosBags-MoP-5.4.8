@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.6.0-alpha - 2026-09-10
+
+### Added
+
+- Dark UI appearance mode for the 5.4.8 client
+- Optional neutral solid background
+- Adjustable background opacity
+- Saved appearance settings
+
+### Changed
+
+- Removed the extra template background behind item icons
+- Replaced the doubled item frame with a slightly larger, thicker border
+- Quality colors and upgrade highlights now use the cleaner border treatment
+
 ## 1.5.0-alpha - 2026-09-09
 
 ### Added

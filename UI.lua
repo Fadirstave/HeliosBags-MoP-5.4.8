@@ -5,39 +5,90 @@ HB:RegisterModule("UI", UI)
 
 local BUTTON_LIMIT = 220
 
-local function Backdrop(frame, alpha)
+local function ApplyBackdrop(frame)
+  local profile = HB.profile
+  local background = profile.neutralBackground and "Interface\\Buttons\\WHITE8X8"
+    or "Interface\\DialogFrame\\UI-DialogBox-Background-Dark"
   frame:SetBackdrop({
-    bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
+    bgFile = background,
     edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
     tile = true, tileSize = 16, edgeSize = 12,
     insets = { left = 3, right = 3, top = 3, bottom = 3 },
   })
-  frame:SetBackdropColor(0.035, 0.045, 0.06, alpha or 0.98)
-  frame:SetBackdropBorderColor(0.18, 0.55, 0.72, 0.9)
+  local alpha = profile.backgroundAlpha or 0.98
+  if profile.darkMode then
+    if profile.neutralBackground then
+      frame:SetBackdropColor(0.055, 0.055, 0.055, alpha)
+    else
+      frame:SetBackdropColor(0.025, 0.03, 0.04, alpha)
+    end
+    frame:SetBackdropBorderColor(0.16, 0.38, 0.48, 0.95)
+  else
+    if profile.neutralBackground then
+      frame:SetBackdropColor(0.18, 0.18, 0.18, alpha)
+    else
+      frame:SetBackdropColor(0.16, 0.12, 0.075, alpha)
+    end
+    frame:SetBackdropBorderColor(0.50, 0.40, 0.24, 0.95)
+  end
+end
+
+local function CreateEdgeBorder(parent, frameLevel, outset, thickness, blendMode)
+  local border = CreateFrame("Frame", nil, parent)
+  border:SetFrameLevel(frameLevel)
+  border:SetPoint("TOPLEFT", -outset, outset)
+  border:SetPoint("BOTTOMRIGHT", outset, -outset)
+  border:EnableMouse(false)
+  border.edges = {}
+
+  local top = border:CreateTexture(nil, "OVERLAY")
+  top:SetTexture("Interface\\Buttons\\WHITE8X8")
+  top:SetPoint("TOPLEFT")
+  top:SetPoint("TOPRIGHT")
+  top:SetHeight(thickness)
+  border.edges[#border.edges + 1] = top
+
+  local bottom = border:CreateTexture(nil, "OVERLAY")
+  bottom:SetTexture("Interface\\Buttons\\WHITE8X8")
+  bottom:SetPoint("BOTTOMLEFT")
+  bottom:SetPoint("BOTTOMRIGHT")
+  bottom:SetHeight(thickness)
+  border.edges[#border.edges + 1] = bottom
+
+  local left = border:CreateTexture(nil, "OVERLAY")
+  left:SetTexture("Interface\\Buttons\\WHITE8X8")
+  left:SetPoint("TOPLEFT")
+  left:SetPoint("BOTTOMLEFT")
+  left:SetWidth(thickness)
+  border.edges[#border.edges + 1] = left
+
+  local right = border:CreateTexture(nil, "OVERLAY")
+  right:SetTexture("Interface\\Buttons\\WHITE8X8")
+  right:SetPoint("TOPRIGHT")
+  right:SetPoint("BOTTOMRIGHT")
+  right:SetWidth(thickness)
+  border.edges[#border.edges + 1] = right
+
+  for _, edge in ipairs(border.edges) do
+    if blendMode then edge:SetBlendMode(blendMode) end
+  end
+
+  function border:SetColor(red, green, blue, alpha)
+    for _, edge in ipairs(self.edges) do edge:SetVertexColor(red, green, blue, alpha) end
+  end
+
+  return border
 end
 
 local function CreateItemButton(parent, index)
   local button = CreateFrame("Button", "HeliosBagsItem" .. index, parent, "ItemButtonTemplate,SecureActionButtonTemplate")
   button:SetFrameLevel(parent:GetFrameLevel() + 5)
-  local upgradeGlow = CreateFrame("Frame", nil, button)
-  upgradeGlow:SetFrameLevel(button:GetFrameLevel() + 8)
-  upgradeGlow:SetPoint("TOPLEFT", -2, 2)
-  upgradeGlow:SetPoint("BOTTOMRIGHT", 2, -2)
-  upgradeGlow:EnableMouse(false)
-  local function AddGlowEdge(point1, x1, y1, point2, x2, y2, width, height)
-    local edge = upgradeGlow:CreateTexture(nil, "OVERLAY")
-    edge:SetTexture("Interface\\Buttons\\WHITE8X8")
-    edge:SetBlendMode("ADD")
-    edge:SetVertexColor(0.10, 1, 0.25, 0.85)
-    edge:SetPoint(point1, x1, y1)
-    edge:SetPoint(point2, x2, y2)
-    if width then edge:SetWidth(width) end
-    if height then edge:SetHeight(height) end
-  end
-  AddGlowEdge("TOPLEFT", 0, 0, "TOPRIGHT", 0, 0, nil, 2)
-  AddGlowEdge("BOTTOMLEFT", 0, 0, "BOTTOMRIGHT", 0, 0, nil, 2)
-  AddGlowEdge("TOPLEFT", 0, 0, "BOTTOMLEFT", 0, 0, 2, nil)
-  AddGlowEdge("TOPRIGHT", 0, 0, "BOTTOMRIGHT", 0, 0, 2, nil)
+  button:SetNormalTexture(nil)
+  local itemBorder = CreateEdgeBorder(button, button:GetFrameLevel() + 6, 0, 2)
+  itemBorder:SetColor(0.38, 0.40, 0.43, 0.95)
+  button.itemBorder = itemBorder
+  local upgradeGlow = CreateEdgeBorder(button, button:GetFrameLevel() + 8, 3, 2, "ADD")
+  upgradeGlow:SetColor(0.10, 1, 0.25, 0.9)
   upgradeGlow:Hide()
   button.upgradeGlow = upgradeGlow
   button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
@@ -171,6 +222,10 @@ function UI:UpdateMoney()
   else self.money:SetText(tostring(amount)) end
 end
 
+function UI:ApplyAppearance()
+  if self.frame then ApplyBackdrop(self.frame) end
+end
+
 function UI:CreateFrame()
   local frame = CreateFrame("Frame", "HeliosBagsFrame", UIParent)
   self.frame = frame
@@ -183,7 +238,7 @@ function UI:CreateFrame()
   frame:SetSize(680, 420)
   local pos = HB.profile.position
   frame:SetPoint(pos.point or "CENTER", UIParent, pos.point or "CENTER", pos.x or 0, pos.y or 0)
-  Backdrop(frame)
+  ApplyBackdrop(frame)
   frame:Hide()
 
   frame:SetScript("OnDragStart", function(self)
@@ -485,12 +540,12 @@ function UI:RenderButton(button, item)
     icon:SetAlpha(1)
   end
 
-  if item and item.quality and item.quality > 1 and button.IconBorder then
+  if button.IconBorder then button.IconBorder:Hide() end
+  if item and item.quality and item.quality > 1 then
     local r, g, b = GetItemQualityColor(item.quality)
-    button.IconBorder:SetVertexColor(r, g, b)
-    button.IconBorder:Show()
-  elseif button.IconBorder then
-    button.IconBorder:Hide()
+    button.itemBorder:SetColor(r, g, b, 1)
+  else
+    button.itemBorder:SetColor(0.38, 0.40, 0.43, 0.95)
   end
 
   if item and not item.empty and HB.Upgrades and HB.profile.showUpgrades then
@@ -619,6 +674,7 @@ end
 
 function UI:Refresh(forceLayout)
   if not self.frame:IsShown() then return end
+  self:ApplyAppearance()
   if forceLayout == false and self.layoutFrozen then
     self:RefreshFrozenItems()
     return
