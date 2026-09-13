@@ -75,9 +75,12 @@ function Settings:CreateMainPanel(parent)
   AddCheckBox(panel, "HeliosBagsLockCheck", "Lock the bag window", 12, -140,
     function() return HB.profile.locked end,
     function(value) HB.profile.locked = value end)
-  AddCheckBox(panel, "HeliosBagsUpgradeCheck", "Highlight potential equipment upgrades", 12, -172,
-    function() return HB.profile.showUpgrades end,
-    function(value) HB.profile.showUpgrades = value end)
+  AddSlider(panel, "HeliosBagsRecentTimeoutSlider", "Recent duration (seconds)", 20, -198, 5, 60, 5,
+    function() return HB.profile.recentTimeout end,
+    function(value)
+      HB.profile.recentTimeout = value
+      if HB.Categories then HB.Categories:ClearExpiredRecent() end
+    end)
 
   AddLabel(panel, "Appearance", 334, -76, "GameFontNormalLarge")
   AddCheckBox(panel, "HeliosBagsDarkModeCheck", "Dark UI mode", 326, -104,
@@ -140,7 +143,7 @@ function Settings:CreateMainPanel(parent)
     HB.profile.buttonSize = 48
     HB.profile.buttonSpacing = 1
     HB.profile.showEmpty = true
-    HB.profile.showUpgrades = true
+    HB.profile.recentTimeout = 15
     HB.profile.categoryView = true
     HB.profile.locked = false
     HB.profile.darkMode = true

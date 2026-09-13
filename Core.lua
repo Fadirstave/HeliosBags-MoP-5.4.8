@@ -2,7 +2,7 @@ local ADDON_NAME, HB = ...
 
 HeliosBags = HB
 HB.name = ADDON_NAME
-HB.version = "1.6.0-alpha"
+HB.version = "1.7.1-alpha"
 HB.events = CreateFrame("Frame")
 HB.modules = {}
 HB.moduleOrder = {}
@@ -10,7 +10,7 @@ HB.moduleErrors = {}
 
 local defaults = {
   profile = {
-    layoutVersion = 7,
+    layoutVersion = 8,
     scale = 0.75,
     autoLayout = true,
     sectionItemColumns = 16,
@@ -18,12 +18,11 @@ local defaults = {
     buttonSpacing = 1,
     categoryView = true,
     showEmpty = true,
-    showUpgrades = true,
     locked = false,
     darkMode = true,
     neutralBackground = false,
     backgroundAlpha = 0.98,
-    recentBagOpens = 3,
+    recentTimeout = 15,
     position = { point = "BOTTOMRIGHT", x = -42, y = 110 },
     categoryOrder = {
       "Hearthstones", "Quest", "Equipment", "Consumables", "Trade Goods", "Containers", "Miscellaneous", "Recent", "Junk", "Empty",
@@ -123,6 +122,10 @@ function HB:Initialize()
       end
     end
     table.insert(self.profile.categoryOrder, junkIndex, "Recent")
+  end
+  if previousLayoutVersion < 8 then
+    self.profile.layoutVersion = 8
+    self.profile.recentTimeout = 15
   end
 
   for _, name in ipairs(self.moduleOrder) do

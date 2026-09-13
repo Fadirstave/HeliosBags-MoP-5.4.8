@@ -2,13 +2,12 @@
 ## Title: HeliosBags
 ## Notes: Unified, searchable, category-based bags for Mists of Pandaria 5.4.8.
 ## Author: HeliosBags Contributors
-## Version: 1.6.0-alpha
+## Version: 1.7.1-alpha
 ## SavedVariables: HeliosBagsDB
 ## SavedVariablesPerCharacter: HeliosBagsCharacterDB
 
 Core.lua
 Categories.lua
 Inventory.lua
-Upgrades.lua
 UI.lua
 Settings.lua

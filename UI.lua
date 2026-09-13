@@ -87,10 +87,13 @@ local function CreateItemButton(parent, index)
   local itemBorder = CreateEdgeBorder(button, button:GetFrameLevel() + 6, 0, 2)
   itemBorder:SetColor(0.38, 0.40, 0.43, 0.95)
   button.itemBorder = itemBorder
-  local upgradeGlow = CreateEdgeBorder(button, button:GetFrameLevel() + 8, 3, 2, "ADD")
-  upgradeGlow:SetColor(0.10, 1, 0.25, 0.9)
-  upgradeGlow:Hide()
-  button.upgradeGlow = upgradeGlow
+  local questTexture = button.IconQuestTexture or _G[button:GetName() .. "IconQuestTexture"]
+  if not questTexture then
+    questTexture = button:CreateTexture(nil, "OVERLAY")
+    questTexture:SetAllPoints(button)
+  end
+  questTexture:Hide()
+  button.questTexture = questTexture
   button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
   button:RegisterForDrag("LeftButton")
   local function PickupItem(self)
@@ -140,24 +143,13 @@ function UI:ShowItemTooltip(button)
   elseif button.item.link then GameTooltip:SetHyperlink(button.item.link) end
   local total = HB.Inventory:GetTotalCount(button.item.itemID)
   if total > 0 then GameTooltip:AddLine("All characters: " .. total, 0.35, 0.78, 1) end
-  if IsShiftKeyDown() and button.upgradeInfo and HB.Upgrades then
-    HB.Upgrades:AddTooltip(GameTooltip, button.upgradeInfo)
-  end
   GameTooltip:Show()
-
-  if IsShiftKeyDown() and GameTooltip_ShowCompareItem then
-    GameTooltip_ShowCompareItem(GameTooltip, true)
-  else
-    if ShoppingTooltip1 then ShoppingTooltip1:Hide() end
-    if ShoppingTooltip2 then ShoppingTooltip2:Hide() end
-  end
 end
 
 function UI:RegisterContextEvents()
   self.contextEvents = CreateFrame("Frame")
   self.contextEvents:RegisterEvent("MERCHANT_SHOW")
   self.contextEvents:RegisterEvent("MERCHANT_CLOSED")
-  self.contextEvents:RegisterEvent("MODIFIER_STATE_CHANGED")
   self.contextEvents:RegisterEvent("PLAYER_MONEY")
   self.contextEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
   self.contextEvents:SetScript("OnEvent", function(_, event, key)
@@ -173,14 +165,15 @@ function UI:RegisterContextEvents()
       if self.bagHookDriver then self.bagHookDriver:Hide() end
       if CloseAllBags then CloseAllBags() end
       if self.frame:IsShown() then self:Hide() end
-    elseif event == "MODIFIER_STATE_CHANGED" and (key == "LSHIFT" or key == "RSHIFT") then
-      if self.hoveredButton then
-        self:ShowItemTooltip(self.hoveredButton)
-      end
     elseif event == "PLAYER_MONEY" then
       self:UpdateMoney()
-    elseif event == "PLAYER_REGEN_ENABLED" and self.secureActionsPending then
-      self:UpdateSecureItemActions()
+    elseif event == "PLAYER_REGEN_ENABLED" then
+      if self.secureActionsPending then self:UpdateSecureItemActions() end
+      if self.recentRefreshPending and self.frame:IsShown() then
+        self.recentRefreshPending = nil
+        self.layoutFrozen = false
+        self:Refresh(true)
+      end
     end
   end)
 end
@@ -241,6 +234,20 @@ function UI:CreateFrame()
   ApplyBackdrop(frame)
   frame:Hide()
 
+  frame:SetScript("OnUpdate", function(_, elapsed)
+    self.recentElapsed = (self.recentElapsed or 0) + elapsed
+    if self.recentElapsed < 0.25 then return end
+    self.recentElapsed = 0
+    if HB.Categories:ClearExpiredRecent() then
+      if InCombatLockdown and InCombatLockdown() then
+        self.recentRefreshPending = true
+      else
+        self.layoutFrozen = false
+        self:Refresh(true)
+      end
+    end
+  end)
+
   frame:SetScript("OnDragStart", function(self)
     if not HB.profile.locked then self:StartMoving() end
   end)
@@ -258,12 +265,6 @@ function UI:CreateFrame()
   local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", -3, -3)
 
-  local bagsTab = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-  bagsTab:SetSize(72, 23)
-  bagsTab:SetPoint("TOPLEFT", 12, -39)
-  bagsTab:SetText("Bags")
-  bagsTab:SetScript("OnClick", function() self:Refresh(true) end)
-
   local options = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
   options:SetSize(64, 23)
   options:SetPoint("TOPRIGHT", -39, -39)
@@ -277,9 +278,16 @@ function UI:CreateFrame()
   search:SetPoint("TOPLEFT", 12, -68)
   search:SetAutoFocus(false)
   search:SetScript("OnTextChanged", function(edit)
-    SearchBoxTemplate_OnTextChanged(edit)
-    self.search = edit:GetText() or ""
+    if SearchBoxTemplate_OnTextChanged then SearchBoxTemplate_OnTextChanged(edit) end
+    local value = edit:GetText() or ""
+    if not edit:HasFocus() and (value == "Search" or value == SEARCH) then value = "" end
+    self.search = value
     self:Refresh(true)
+  end)
+  search:SetScript("OnEnterPressed", function(edit) edit:ClearFocus() end)
+  search:SetScript("OnEscapePressed", function(edit)
+    edit:SetText("")
+    edit:ClearFocus()
   end)
   self.searchBox = search
 
@@ -326,14 +334,6 @@ function UI:CreateFrame()
   sellJunk:Hide()
   self.sellJunk = sellJunk
 
-  local upgradeNotice = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  upgradeNotice:SetPoint("BOTTOMLEFT", 14, 12)
-  upgradeNotice:SetWidth(190)
-  upgradeNotice:SetJustifyH("LEFT")
-  upgradeNotice:SetTextColor(0.35, 1, 0.45)
-  upgradeNotice:Hide()
-  self.upgradeNotice = upgradeNotice
-
   local content = CreateFrame("Frame", nil, frame)
   content:SetPoint("TOPLEFT", 10, -98)
   content:SetSize(430, 1)
@@ -366,27 +366,36 @@ function UI:HookBags()
     end
   end
 
-  Hook("ToggleAllBags", "toggle")
+  local function HookToggle(name)
+    if not _G[name] then return end
+    hooksecurefunc(name, function()
+      local stack = debugstack and debugstack() or ""
+      if string.find(stack, "OpenAllBags", 1, true)
+        or string.find(stack, "CloseAllBags", 1, true)
+        or string.find(stack, "OpenBackpack", 1, true)
+        or string.find(stack, "OpenBag", 1, true) then
+        return
+      end
+      self:QueueBagAction("toggle")
+    end)
+  end
+
+  HookToggle("ToggleAllBags")
   Hook("OpenAllBags", "open")
-  Hook("ToggleBackpack", "toggle")
+  HookToggle("ToggleBackpack")
   Hook("OpenBackpack", "open")
-  Hook("ToggleBag", "toggle")
+  HookToggle("ToggleBag")
   Hook("OpenBag", "open")
 end
 
 function UI:QueueBagAction(action)
-  if self.merchantOpen or (MerchantFrame and MerchantFrame:IsShown()) then
-    self.pendingBagAction = "open"
-    self.bagHookDriver:Show()
-    return
-  end
   if action == "toggle" or not self.pendingBagAction then self.pendingBagAction = action end
   self.bagHookDriver:Show()
 end
 
 function UI:Show()
   if CloseAllBags then CloseAllBags() end
-  if HB.Categories and HB.Categories.OnBagOpened then HB.Categories:OnBagOpened() end
+  HB.Categories:ClearExpiredRecent()
   HB.Inventory:Scan()
   self.frame:Show()
   self.layoutFrozen = false
@@ -493,7 +502,7 @@ function UI:GetGroupedItems()
 
   for _, entry in ipairs(self:GetCategorizedItems()) do
     local item, category = entry.item, entry.category
-    if (HB.profile.showEmpty or not item.empty) and HB.Categories:MatchesSearch(item, self.search) then
+    if (HB.profile.showEmpty or not item.empty) and HB.Categories:MatchesSearch(item, self.search, category) then
       groups[category] = groups[category] or {}
       if item.empty then
         aggregated[category] = aggregated[category] or {}
@@ -526,9 +535,7 @@ end
 function UI:RenderButton(button, item)
   button.item = item
   self:SetSecureItemAction(button, item)
-  button.isUpgrade = nil
-  button.upgradeInfo = nil
-  button.upgradeGlow:Hide()
+  button.questTexture:Hide()
   button:SetAlpha(1)
   SetItemButtonTexture(button, item and item.texture or nil)
   SetItemButtonCount(button, item and item.count or 0)
@@ -548,39 +555,28 @@ function UI:RenderButton(button, item)
     button.itemBorder:SetColor(0.38, 0.40, 0.43, 0.95)
   end
 
-  if item and not item.empty and HB.Upgrades and HB.profile.showUpgrades then
-    local upgrade = HB.Upgrades:Evaluate(item)
-    if upgrade then
-      button.isUpgrade = true
-      button.upgradeInfo = upgrade
-      button.upgradeGlow:Show()
+  if item and not item.empty and (item.questID or item.isQuestItem) then
+    if item.startsQuest then
+      button.questTexture:SetTexture(TEXTURE_ITEM_QUEST_BANG or "Interface\\ContainerFrame\\UI-Icon-QuestBang")
+    else
+      button.questTexture:SetTexture(TEXTURE_ITEM_QUEST_BORDER or "Interface\\ContainerFrame\\UI-Icon-QuestBorder")
     end
+    button.questTexture:Show()
   end
 end
 
 function UI:UpdateFooter()
-  if not self.sellJunk or not self.upgradeNotice then return end
+  if not self.sellJunk then return end
   local atMerchant = self.merchantOpen or (MerchantFrame and MerchantFrame:IsShown())
   if atMerchant then
     local stacks = HB.Inventory:GetJunkSummary()
     self.sellJunk:SetText(stacks > 0 and ("Sell Junk (" .. stacks .. ")") or "No Junk")
     self.sellJunk:SetEnabled(stacks > 0)
     self.sellJunk:Show()
-    self.upgradeNotice:Hide()
     return
   end
 
   self.sellJunk:Hide()
-  local upgrades = 0
-  for _, button in ipairs(self.buttons) do
-    if button:IsShown() and button.isUpgrade then upgrades = upgrades + 1 end
-  end
-  if HB.profile.showUpgrades and upgrades > 0 then
-    self.upgradeNotice:SetText(upgrades .. " potential upgrade" .. (upgrades == 1 and "" or "s"))
-    self.upgradeNotice:Show()
-  else
-    self.upgradeNotice:Hide()
-  end
 end
 
 function UI:GetLiveGroupedItems()

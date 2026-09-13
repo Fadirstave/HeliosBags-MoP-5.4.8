@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.7.1-alpha - 2026-09-13
+
+### Fixed
+
+- Empty bags caused by the search placeholder being treated as an active filter
+- Items now remain visible when the search box loses focus
+- Removed the unnecessary Bags button from the inventory header
+
+## 1.7.0-alpha - 2026-09-13
+
+### Added
+
+- Quest-start and quest-item markers on bag icons
+- Configurable Recent-item duration
+
+### Changed
+
+- Recent loot now returns to its normal category automatically after a short timer
+- Separate acquisitions of the same item expire independently
+- Bag hotkeys and bag buttons can open and close HeliosBags while a vendor is open
+
+### Fixed
+
+- Search now filters live by item name, item details, and category name
+- Enter and Escape now finish or clear a bag search correctly
+
+### Removed
+
+- Equipment upgrade detection, highlights, comparison text, and settings
+
 ## 1.6.0-alpha - 2026-09-10
 
 ### Added

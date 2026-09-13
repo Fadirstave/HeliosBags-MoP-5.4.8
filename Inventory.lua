@@ -18,6 +18,15 @@ local function ReadSlot(bag, slot)
 
   itemID = itemID or ItemIDFromLink(link)
   local name, itemLink, itemQuality, itemLevel, _, itemType, itemSubType, _, equipLoc, itemTexture, sellPrice = GetItemInfo(link or itemID)
+  local isQuestItem, questID, isActive
+  if GetContainerItemQuestInfo then
+    isQuestItem, questID, isActive = GetContainerItemQuestInfo(bag, slot)
+  elseif C_Container and C_Container.GetContainerItemQuestInfo then
+    local questInfo = C_Container.GetContainerItemQuestInfo(bag, slot)
+    if type(questInfo) == "table" then
+      isQuestItem, questID, isActive = questInfo.isQuestItem, questInfo.questID, questInfo.isActive
+    end
+  end
   return {
     bag = bag,
     slot = slot,
@@ -33,6 +42,10 @@ local function ReadSlot(bag, slot)
     subType = itemSubType,
     equipLoc = equipLoc,
     sellPrice = sellPrice,
+    isQuestItem = isQuestItem or questID ~= nil,
+    questID = questID,
+    questActive = isActive,
+    startsQuest = questID ~= nil and questID ~= 0 and not isActive,
   }
 end
 
@@ -125,7 +138,8 @@ function Inventory:SaveSnapshot(items)
       snapshot[#snapshot + 1] = {
         itemID = item.itemID, link = item.link, count = item.count, texture = item.texture,
         quality = item.quality, name = item.name, type = item.type, subType = item.subType,
-        equipLoc = item.equipLoc, itemLevel = item.itemLevel,
+        equipLoc = item.equipLoc, itemLevel = item.itemLevel, isQuestItem = item.isQuestItem,
+        questID = item.questID, questActive = item.questActive, startsQuest = item.startsQuest,
       }
     end
   end
