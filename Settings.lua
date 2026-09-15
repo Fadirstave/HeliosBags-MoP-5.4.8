@@ -19,7 +19,7 @@ local function AddCheckBox(parent, name, text, x, y, getter, setter)
   box:SetScript("OnShow", function(self) self:SetChecked(getter()) end)
   box:SetScript("OnClick", function(self)
     setter(self:GetChecked() and true or false)
-    if HB.UI then HB.UI:Refresh() end
+    if HB.UI then HB.UI:RefreshOpenViews() end
   end)
   return box
 end
@@ -38,7 +38,7 @@ local function AddSlider(parent, name, text, x, y, minimum, maximum, step, gette
     value = math.floor(value / step + 0.5) * step
     setter(value)
     _G[name .. "Text"]:SetText(text .. ": " .. value)
-    if HB.UI and HB.UI.frame and HB.UI.frame:IsShown() then HB.UI:Refresh() end
+    if HB.UI then HB.UI:RefreshOpenViews() end
   end)
   return slider
 end
@@ -132,8 +132,11 @@ function Settings:CreateMainPanel(parent)
   reset:SetText("Reset window position")
   reset:SetScript("OnClick", function()
     HB.profile.position = { point = "BOTTOMRIGHT", x = -42, y = 110 }
+    HB.profile.bankPosition = { point = "CENTER", x = -360, y = 0 }
     HB.UI.frame:ClearAllPoints()
     HB.UI.frame:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -42, 110)
+    HB.UI.bankView.frame:ClearAllPoints()
+    HB.UI.bankView.frame:SetPoint("CENTER", UIParent, "CENTER", -360, 0)
   end)
 
   panel.default = function()
@@ -151,7 +154,7 @@ function Settings:CreateMainPanel(parent)
     HB.profile.backgroundAlpha = 0.98
     HB.profile.collapsedCategories = {}
     if HB.UI then HB.UI:ApplyAppearance() end
-    if HB.UI then HB.UI:Refresh() end
+    if HB.UI then HB.UI:RefreshOpenViews() end
   end
   InterfaceOptions_AddCategory(panel, true)
 end
@@ -162,7 +165,7 @@ function Settings:MoveCategory(index, direction)
   local order = HB.profile.categoryOrder
   order[index], order[destination] = order[destination], order[index]
   self:RefreshCategoryRows()
-  if HB.UI then HB.UI:Refresh() end
+  if HB.UI then HB.UI:RefreshOpenViews() end
 end
 
 function Settings:SelectCategory(name)
@@ -199,7 +202,7 @@ function Settings:SaveCategory()
   HB.profile.customCategories[name] = rule
   self.selectedCategory = name
   self:RefreshCategoryRows()
-  if HB.UI then HB.UI:Refresh() end
+  if HB.UI then HB.UI:RefreshOpenViews() end
   HB:Print("Saved category " .. name .. ".")
 end
 
@@ -216,7 +219,7 @@ function Settings:DeleteCategory()
   self.categoryName:SetText("")
   self.categoryRule:SetText("")
   self:RefreshCategoryRows()
-  if HB.UI then HB.UI:Refresh() end
+  if HB.UI then HB.UI:RefreshOpenViews() end
 end
 
 function Settings:RefreshCategoryRows()

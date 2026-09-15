@@ -2,7 +2,7 @@ local ADDON_NAME, HB = ...
 
 HeliosBags = HB
 HB.name = ADDON_NAME
-HB.version = "1.7.1-alpha"
+HB.version = "1.8.1-alpha"
 HB.events = CreateFrame("Frame")
 HB.modules = {}
 HB.moduleOrder = {}
@@ -10,7 +10,7 @@ HB.moduleErrors = {}
 
 local defaults = {
   profile = {
-    layoutVersion = 8,
+    layoutVersion = 9,
     scale = 0.75,
     autoLayout = true,
     sectionItemColumns = 16,
@@ -24,6 +24,7 @@ local defaults = {
     backgroundAlpha = 0.98,
     recentTimeout = 15,
     position = { point = "BOTTOMRIGHT", x = -42, y = 110 },
+    bankPosition = { point = "CENTER", x = -360, y = 0 },
     categoryOrder = {
       "Hearthstones", "Quest", "Equipment", "Consumables", "Trade Goods", "Containers", "Miscellaneous", "Recent", "Junk", "Empty",
     },
@@ -127,6 +128,10 @@ function HB:Initialize()
     self.profile.layoutVersion = 8
     self.profile.recentTimeout = 15
   end
+  if previousLayoutVersion < 9 then
+    self.profile.layoutVersion = 9
+    self.profile.bankPosition = { point = "CENTER", x = -360, y = 0 }
+  end
 
   for _, name in ipairs(self.moduleOrder) do
     local module = self.modules[name]
@@ -153,8 +158,11 @@ SlashCmdList.HELIOSBAGS = function(text)
   text = strtrim(string.lower(text or ""))
   if text == "reset" and HB.UI then
     HB.profile.position = { point = "BOTTOMRIGHT", x = -42, y = 110 }
+    HB.profile.bankPosition = { point = "CENTER", x = -360, y = 0 }
     HB.UI.frame:ClearAllPoints()
     HB.UI.frame:SetPoint("BOTTOMRIGHT", UIParent, "BOTTOMRIGHT", -42, 110)
+    HB.UI.bankView.frame:ClearAllPoints()
+    HB.UI.bankView.frame:SetPoint("CENTER", UIParent, "CENTER", -360, 0)
     HB:Print("Window position reset.")
   elseif text == "debug" then
     HB:Print("Version " .. HB.version .. ", interface " .. tostring(select(4, GetBuildInfo())))

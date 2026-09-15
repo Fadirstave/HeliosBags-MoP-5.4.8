@@ -4,6 +4,9 @@ HB.Inventory = Inventory
 HB:RegisterModule("Inventory", Inventory)
 
 local BAG_FIRST, BAG_LAST = 0, 4
+local BANK_CONTAINER_ID = BANK_CONTAINER or -1
+local BANK_BAG_FIRST = (NUM_BAG_SLOTS or 4) + 1
+local BANK_BAG_LAST = BANK_BAG_FIRST + (NUM_BANKBAGSLOTS or 7) - 1
 
 local function ItemIDFromLink(link)
   if not link then return nil end
@@ -20,10 +23,11 @@ local function ReadSlot(bag, slot)
   local name, itemLink, itemQuality, itemLevel, _, itemType, itemSubType, _, equipLoc, itemTexture, sellPrice = GetItemInfo(link or itemID)
   local isQuestItem, questID, isActive
   if GetContainerItemQuestInfo then
-    isQuestItem, questID, isActive = GetContainerItemQuestInfo(bag, slot)
+    local result, questItem, itemQuestID, active = pcall(GetContainerItemQuestInfo, bag, slot)
+    if result then isQuestItem, questID, isActive = questItem, itemQuestID, active end
   elseif C_Container and C_Container.GetContainerItemQuestInfo then
-    local questInfo = C_Container.GetContainerItemQuestInfo(bag, slot)
-    if type(questInfo) == "table" then
+    local result, questInfo = pcall(C_Container.GetContainerItemQuestInfo, bag, slot)
+    if result and type(questInfo) == "table" then
       isQuestItem, questID, isActive = questInfo.isQuestItem, questInfo.questID, questInfo.isActive
     end
   end
@@ -58,6 +62,8 @@ end
 
 function Inventory:Initialize()
   self.items = {}
+  self.bankItems = {}
+  self.bankOpen = false
   self.lastBagCounts = {}
   self.hasBagBaseline = false
   self.loginBaselinePending = true
@@ -76,6 +82,10 @@ function Inventory:Initialize()
   self.events:RegisterEvent("BAG_UPDATE_COOLDOWN")
   self.events:RegisterEvent("ITEM_LOCK_CHANGED")
   self.events:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+  self.events:RegisterEvent("PLAYERBANKSLOTS_CHANGED")
+  self.events:RegisterEvent("PLAYERBANKBAGSLOTS_CHANGED")
+  self.events:RegisterEvent("BANKFRAME_OPENED")
+  self.events:RegisterEvent("BANKFRAME_CLOSED")
   self.events:RegisterEvent("PLAYER_ENTERING_WORLD")
   self.events:RegisterEvent("CHAT_MSG_LOOT")
   self.events:SetScript("OnEvent", function(_, event)
@@ -84,13 +94,37 @@ function Inventory:Initialize()
       self.loginBaselineElapsed = 0
       self.loginBaselineDriver:Show()
       self:Scan(true)
+    elseif event == "BANKFRAME_OPENED" then
+      self.bankOpen = true
+      self:ScanBank()
+    elseif event == "BANKFRAME_CLOSED" then
+      self.bankOpen = false
+      self.bankItems = {}
+    elseif event == "PLAYERBANKSLOTS_CHANGED" or event == "PLAYERBANKBAGSLOTS_CHANGED" then
+      if self.bankOpen then self:ScanBank() end
     elseif event ~= "BAG_UPDATE_COOLDOWN" then
       self:Scan(self.loginBaselinePending)
+      if self.bankOpen then self:ScanBank() end
     end
     if HB.UI and HB.UI.frame and HB.UI.frame:IsShown() then HB.UI:Refresh(false) end
+    if HB.UI and HB.UI.bankView and HB.UI.bankView.frame:IsShown() then HB.UI.bankView:Refresh(false) end
   end)
   self.loginBaselineDriver:Show()
   self:Scan(true)
+end
+
+function Inventory:ScanBank()
+  if not self.bankOpen then return self.bankItems end
+  local result = {}
+  local slots = GetContainerNumSlots(BANK_CONTAINER_ID) or 0
+  for slot = 1, slots do result[#result + 1] = ReadSlot(BANK_CONTAINER_ID, slot) end
+  for bag = BANK_BAG_FIRST, BANK_BAG_LAST do
+    slots = GetContainerNumSlots(bag) or 0
+    for slot = 1, slots do result[#result + 1] = ReadSlot(bag, slot) end
+  end
+  self.bankItems = result
+  self:SaveSnapshot(result, "bank")
+  return result
 end
 
 function Inventory:Scan(establishBaseline)
@@ -129,9 +163,10 @@ function Inventory:DetectNewItems(items, establishBaseline)
   self.hasBagBaseline = true
 end
 
-function Inventory:SaveSnapshot(items)
+function Inventory:SaveSnapshot(items, source)
+  source = source or "bags"
   local key = HB:GetCharacterKey()
-  HB.db.characters[key] = HB.db.characters[key] or { bags = {}, updated = 0 }
+  HB.db.characters[key] = HB.db.characters[key] or { bags = {}, bank = {}, updated = 0 }
   local snapshot = {}
   for _, item in ipairs(items) do
     if not item.empty then
@@ -143,7 +178,7 @@ function Inventory:SaveSnapshot(items)
       }
     end
   end
-  HB.db.characters[key].bags = snapshot
+  HB.db.characters[key][source] = snapshot
   HB.db.characters[key].updated = time()
 end
 
@@ -151,11 +186,17 @@ function Inventory:GetItems()
   return self.items
 end
 
+function Inventory:GetBankItems()
+  return self.bankItems
+end
+
 function Inventory:GetTotalCount(itemID)
   local total = 0
   for _, record in pairs(HB.db.characters) do
-    for _, item in ipairs(record.bags or {}) do
-      if item.itemID == itemID then total = total + (item.count or 1) end
+    for _, source in ipairs({ "bags", "bank" }) do
+      for _, item in ipairs(record[source] or {}) do
+        if item.itemID == itemID then total = total + (item.count or 1) end
+      end
     end
   end
   return total

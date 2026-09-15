@@ -1,5 +1,61 @@
 # Changelog
 
+## 1.8.1-alpha - 2026-09-14
+
+### Added
+
+- Dedicated categorized HeliosBags bank window
+- Automatic display of the main bank and all purchased bank bags
+- Empty-slot summary now accepts cursor items and dragged stacks
+
+### Changed
+
+- Physical item stacks remain separately visible after splitting
+- The inventory and bank use matching layouts while remaining separate windows
+
+### Fixed
+
+- The vanilla bank window no longer appears over the HeliosBags bank
+- Bank contents no longer require clicking individual bank-bag buttons
+- Split stacks now appear immediately after being placed into an empty slot
+
+## 1.8.0-alpha - 2026-09-14
+
+### Added
+
+- Combined categorized view for the main bank and purchased bank bags
+- Contextual Bags and Bank controls while interacting with a banker
+- Automatic bag opening when a trade starts
+
+### Fixed
+
+- Purchased bank bags no longer remain as detached container windows
+- Trade-opened bags close automatically when the trade ends
+- Right-clicking an item places it in the first available trade slot
+- Right-clicking an item on the Send Mail screen now adds it as an attachment
+- Shift-left-clicking a stack now opens the native split selector
+
+## 1.7.4-alpha - 2026-09-14
+
+### Fixed
+
+- Purchased bank-bag buttons now open their original bank-container windows
+- Bank containers no longer toggle or replace the HeliosBags inventory window
+
+## 1.7.3-alpha - 2026-09-14
+
+### Fixed
+
+- Right-clicking an item now transfers it while a bank or trade window is open
+- Normal right-click item use remains protected outside bank and trade windows
+- Pressing Escape now closes the HeliosBags window
+
+## 1.7.2-alpha - 2026-09-14
+
+### Fixed
+
+- Holding Shift over gear now shows the equipped-item comparison and stat changes
+
 ## 1.7.1-alpha - 2026-09-13
 
 ### Fixed

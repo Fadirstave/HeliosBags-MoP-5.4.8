@@ -1,4 +1,4 @@
-# HeliosBags 1.7.1-alpha
+# HeliosBags 1.8.1-alpha
 
 HeliosBags is a unified inventory addon for the TwinStar Helios Mists of Pandaria 5.4.8 client.
 
@@ -10,7 +10,7 @@ HeliosBags is a unified inventory addon for the TwinStar Helios Mists of Pandari
 - Adjustable background transparency
 - Live item and category search with clear and keyboard controls
 - Collapsible built-in and custom category sections
-- Combined item counts and collapsed empty slots
+- Separate physical stacks and a compact empty-slot summary
 - Quantity-aware Recent items that return to their normal categories automatically
 - Configurable Recent-item duration
 - Quest-start and quest-item markers
@@ -20,6 +20,12 @@ HeliosBags is a unified inventory addon for the TwinStar Helios Mists of Pandari
 - Vendor junk selling
 - Secure use support for targeted consumables
 - Drag-and-drop support for action bars, item movement, and deletion
+- Shift-click stack splitting with the native amount selector
+- Native equipped-item comparisons while holding Shift over gear
+- Context-aware right-click transfers for banks, trades, mail, and vendors
+- Standard Escape-key closing behavior
+- Dedicated categorized bank window while interacting with a banker
+- Main-bank and purchased-bank-bag contents shown automatically
 - Clean item icons with thicker quality-colored borders
 - Stable item positions while selling
 - Backpack and equipped-bag button integration

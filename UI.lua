@@ -80,8 +80,8 @@ local function CreateEdgeBorder(parent, frameLevel, outset, thickness, blendMode
   return border
 end
 
-local function CreateItemButton(parent, index)
-  local button = CreateFrame("Button", "HeliosBagsItem" .. index, parent, "ItemButtonTemplate,SecureActionButtonTemplate")
+local function CreateItemButton(parent, index, owner, prefix)
+  local button = CreateFrame("Button", prefix .. index, parent, "ItemButtonTemplate,SecureActionButtonTemplate")
   button:SetFrameLevel(parent:GetFrameLevel() + 5)
   button:SetNormalTexture(nil)
   local itemBorder = CreateEdgeBorder(button, button:GetFrameLevel() + 6, 0, 2)
@@ -100,24 +100,58 @@ local function CreateItemButton(parent, index)
     if not self.item or self.item.empty or not self.item.bag or self.item.locked then return end
     PickupContainerItem(self.item.bag, self.item.slot)
   end
+  local function ReceiveItem(self)
+    if not self.item or not self.item.bag or self.item.locked then return end
+    PickupContainerItem(self.item.bag, self.item.slot)
+  end
+  button.SplitStack = function(self, split)
+    if not self.item or self.item.empty or not self.item.bag or self.item.locked then return end
+    SplitContainerItem(self.item.bag, self.item.slot, split)
+  end
   button:SetScript("OnDragStart", PickupItem)
-  button:SetScript("OnReceiveDrag", PickupItem)
+  button:SetScript("OnReceiveDrag", ReceiveItem)
+  button:SetScript("OnHide", function(self)
+    if self.hasStackSplit and StackSplitFrame then StackSplitFrame:Hide() end
+  end)
   button:SetScript("OnEnter", function(self)
-    UI.hoveredButton = self
-    UI:ShowItemTooltip(self)
+    owner.hoveredButton = self
+    owner:ShowItemTooltip(self)
   end)
   button:SetScript("OnLeave", function()
-    UI.hoveredButton = nil
+    owner.hoveredButton = nil
     GameTooltip_Hide()
     if ShoppingTooltip1 then ShoppingTooltip1:Hide() end
     if ShoppingTooltip2 then ShoppingTooltip2:Hide() end
   end)
   button:SetScript("PostClick", function(self, mouseButton)
-    if not self.item or self.item.empty or not self.item.bag then return end
+    if not self.item or not self.item.bag then return end
+    if self.item.empty then
+      if mouseButton == "LeftButton" and CursorHasItem() then PickupContainerItem(self.item.bag, self.item.slot) end
+      return
+    end
+    if mouseButton == "LeftButton" and IsModifiedClick("SPLITSTACK") then
+      if self.item.link and HandleModifiedItemClick(self.item.link) then return end
+      if not CursorHasItem() then
+        local _, count, locked = GetContainerItemInfo(self.item.bag, self.item.slot)
+        if not locked and count and count > 1 then
+          if StackSplitFrame and StackSplitFrame.OpenStackSplitFrame then
+            StackSplitFrame:OpenStackSplitFrame(count, self, "BOTTOMLEFT", "TOPLEFT")
+          elseif OpenStackSplitFrame then
+            OpenStackSplitFrame(count, self, "BOTTOMLEFT", "TOPLEFT")
+          end
+        end
+      end
+      return
+    end
     if IsModifiedClick() and self.item.link and HandleModifiedItemClick(self.item.link) then return end
     if mouseButton == "LeftButton" then
       PickupContainerItem(self.item.bag, self.item.slot)
-    elseif mouseButton == "RightButton" and UI.merchantOpen then
+    elseif mouseButton == "RightButton" and owner.tradeOpen then
+      owner:AddItemToTrade(self.item)
+    elseif mouseButton == "RightButton" and owner:IsSendMailOpen() then
+      if SetSendMailShowing then SetSendMailShowing(true) end
+      UseContainerItem(self.item.bag, self.item.slot)
+    elseif mouseButton == "RightButton" and (owner.merchantOpen or owner.bankOpen) then
       UseContainerItem(self.item.bag, self.item.slot)
     end
   end)
@@ -125,15 +159,21 @@ local function CreateItemButton(parent, index)
 end
 
 function UI:Initialize()
+  self.source = "bags"
   self.search = ""
   self.layoutFrozen = false
   self.merchantOpen = false
+  self.bankOpen = false
+  self.tradeOpen = false
+  self.sendMailOpen = false
   self.buttons = {}
   self.headers = {}
   self.rowSeparators = {}
   self:CreateFrame()
+  self:CreateBankView()
   self:HookBags()
   self:RegisterContextEvents()
+  self:SuppressDefaultBank()
 end
 
 function UI:ShowItemTooltip(button)
@@ -144,16 +184,73 @@ function UI:ShowItemTooltip(button)
   local total = HB.Inventory:GetTotalCount(button.item.itemID)
   if total > 0 then GameTooltip:AddLine("All characters: " .. total, 0.35, 0.78, 1) end
   GameTooltip:Show()
+
+  if IsShiftKeyDown() and GameTooltip_ShowCompareItem then
+    GameTooltip_ShowCompareItem(GameTooltip, true)
+  else
+    if ShoppingTooltip1 then ShoppingTooltip1:Hide() end
+    if ShoppingTooltip2 then ShoppingTooltip2:Hide() end
+  end
+end
+
+function UI:IsSendMailOpen()
+  return self.sendMailOpen or SendMailFrame and SendMailFrame:IsShown()
+end
+
+function UI:CloseVanillaBags()
+  if not CloseAllBags then return end
+  HB.UI.handlingBagAction = true
+  CloseAllBags()
+  HB.UI.handlingBagAction = false
+end
+
+function UI:SuppressDefaultBank()
+  if self.defaultBankSuppressed or not BankFrame then return end
+  self.defaultBankSuppressed = true
+  self.hiddenBankFrame = CreateFrame("Frame", "HeliosBagsHiddenBankFrame", UIParent)
+  self.hiddenBankFrame:Hide()
+  BankFrame:SetScript("OnShow", nil)
+  BankFrame:SetScript("OnHide", nil)
+  BankFrame:SetScript("OnEvent", nil)
+  BankFrame:SetParent(self.hiddenBankFrame)
+end
+
+function UI:AddItemToTrade(item)
+  if not item or item.locked or not PickupContainerItem or not ClickTradeButton or not GetTradePlayerItemInfo then return end
+  local tradeSlot
+  for index = 1, 6 do
+    if not select(2, GetTradePlayerItemInfo(index)) then
+      tradeSlot = index
+      break
+    end
+  end
+  if not tradeSlot then
+    if UIErrorsFrame then UIErrorsFrame:AddMessage("The trade window is full.", 1, 0.1, 0.1, 1) end
+    return
+  end
+  PickupContainerItem(item.bag, item.slot)
+  ClickTradeButton(tradeSlot)
+  if ClearCursor then ClearCursor() end
 end
 
 function UI:RegisterContextEvents()
   self.contextEvents = CreateFrame("Frame")
+  self.contextEvents:RegisterEvent("ADDON_LOADED")
   self.contextEvents:RegisterEvent("MERCHANT_SHOW")
   self.contextEvents:RegisterEvent("MERCHANT_CLOSED")
+  self.contextEvents:RegisterEvent("BANKFRAME_OPENED")
+  self.contextEvents:RegisterEvent("BANKFRAME_CLOSED")
+  self.contextEvents:RegisterEvent("TRADE_SHOW")
+  self.contextEvents:RegisterEvent("TRADE_CLOSED")
+  self.contextEvents:RegisterEvent("MAIL_SHOW")
+  self.contextEvents:RegisterEvent("MAIL_CLOSED")
+  self.contextEvents:RegisterEvent("MODIFIER_STATE_CHANGED")
   self.contextEvents:RegisterEvent("PLAYER_MONEY")
   self.contextEvents:RegisterEvent("PLAYER_REGEN_ENABLED")
   self.contextEvents:SetScript("OnEvent", function(_, event, key)
-    if event == "MERCHANT_SHOW" then
+    if event == "ADDON_LOADED" then
+      if key == "Blizzard_BankUI" then self:SuppressDefaultBank() end
+    elseif event == "MERCHANT_SHOW" then
       self.merchantOpen = true
       self:UpdateSecureItemActions()
       self:QueueBagAction("open")
@@ -163,8 +260,49 @@ function UI:RegisterContextEvents()
       self:UpdateSecureItemActions()
       self.pendingBagAction = nil
       if self.bagHookDriver then self.bagHookDriver:Hide() end
-      if CloseAllBags then CloseAllBags() end
+      self:CloseVanillaBags()
       if self.frame:IsShown() then self:Hide() end
+    elseif event == "BANKFRAME_OPENED" then
+      self:SuppressDefaultBank()
+      self.bankOpen = true
+      HB.Inventory.bankOpen = true
+      self.bankAutoOpened = not self.frame:IsShown()
+      self.source = "bags"
+      HB.Inventory:ScanBank()
+      self.bankView.bankOpen = true
+      self.bankView.source = "bank"
+      self.bankView:Show()
+      self:UpdateSecureItemActions()
+      self:QueueBagAction("open")
+    elseif event == "BANKFRAME_CLOSED" then
+      self.bankOpen = false
+      HB.Inventory.bankOpen = false
+      self.source = "bags"
+      self.bankView.bankOpen = false
+      self.bankView.suppressBankClose = true
+      self.bankView:Hide()
+      self.bankView.suppressBankClose = false
+      self:UpdateSecureItemActions()
+      if self.bankAutoOpened and self.frame:IsShown() then self:Hide() end
+      self.bankAutoOpened = false
+    elseif event == "TRADE_SHOW" then
+      self.tradeOpen = true
+      self.tradeAutoOpened = not self.frame:IsShown()
+      self:UpdateSecureItemActions()
+      self:QueueBagAction("open")
+    elseif event == "TRADE_CLOSED" then
+      self.tradeOpen = false
+      self:UpdateSecureItemActions()
+      if self.tradeAutoOpened and self.frame:IsShown() then self:Hide() end
+      self.tradeAutoOpened = false
+    elseif event == "MAIL_SHOW" then
+      self.sendMailOpen = SendMailFrame and SendMailFrame:IsShown() or false
+      self:UpdateSecureItemActions()
+    elseif event == "MAIL_CLOSED" then
+      self.sendMailOpen = false
+      self:UpdateSecureItemActions()
+    elseif event == "MODIFIER_STATE_CHANGED" and (key == "LSHIFT" or key == "RSHIFT") then
+      if self.hoveredButton then self:ShowItemTooltip(self.hoveredButton) end
     elseif event == "PLAYER_MONEY" then
       self:UpdateMoney()
     elseif event == "PLAYER_REGEN_ENABLED" then
@@ -176,6 +314,12 @@ function UI:RegisterContextEvents()
       end
     end
   end)
+  if SetSendMailShowing then
+    hooksecurefunc("SetSendMailShowing", function(state)
+      self.sendMailOpen = state and true or false
+      self:UpdateSecureItemActions()
+    end)
+  end
 end
 
 function UI:SetSecureItemAction(button, item)
@@ -187,7 +331,7 @@ function UI:SetSecureItemAction(button, item)
   button:SetAttribute("type2", nil)
   button:SetAttribute("item2", nil)
 
-  if item and not item.empty and not self.merchantOpen then
+  if item and not item.empty and not self.merchantOpen and not self.bankOpen and not self.tradeOpen and not self:IsSendMailOpen() then
     local itemToken = item.itemID and ("item:" .. tostring(item.itemID)) or item.link
     if itemToken then
       button:SetAttribute("type2", "item")
@@ -217,11 +361,42 @@ end
 
 function UI:ApplyAppearance()
   if self.frame then ApplyBackdrop(self.frame) end
+  if self.bankView and self.bankView.frame then ApplyBackdrop(self.bankView.frame) end
 end
 
-function UI:CreateFrame()
-  local frame = CreateFrame("Frame", "HeliosBagsFrame", UIParent)
+function UI:RefreshOpenViews()
+  if self.frame and self.frame:IsShown() then self:Refresh(true) end
+  if self.bankView and self.bankView.frame:IsShown() then self.bankView:Refresh(true) end
+end
+
+function UI:UpdateBankTabs()
+  if not self.bagsTab or not self.bankTab then return end
+  if self.showSourceTabs and self.bankOpen then
+    self.bagsTab:Show()
+    self.bankTab:Show()
+    self.bagsTab:SetEnabled(self.source ~= "bags")
+    self.bankTab:SetEnabled(self.source ~= "bank")
+  else
+    self.bagsTab:Hide()
+    self.bankTab:Hide()
+  end
+end
+
+function UI:SetSource(source)
+  if source == "bank" and not self.bankOpen then return end
+  self.source = source == "bank" and "bank" or "bags"
+  if self.source == "bank" then HB.Inventory:ScanBank() else HB.Inventory:Scan() end
+  self.layoutFrozen = false
+  self:UpdateBankTabs()
+  self:Refresh(true)
+end
+
+function UI:CreateFrame(frameName, itemPrefix)
+  frameName = frameName or "HeliosBagsFrame"
+  itemPrefix = itemPrefix or "HeliosBagsItem"
+  local frame = CreateFrame("Frame", frameName, UIParent)
   self.frame = frame
+  if UISpecialFrames then table.insert(UISpecialFrames, frame:GetName()) end
   frame:SetFrameStrata("HIGH")
   frame:SetClampedToScreen(true)
   frame:SetMovable(true)
@@ -229,7 +404,8 @@ function UI:CreateFrame()
   frame:RegisterForDrag("LeftButton")
   frame:SetScale(HB.profile.scale)
   frame:SetSize(680, 420)
-  local pos = HB.profile.position
+  local positionKey = self.positionKey or "position"
+  local pos = HB.profile[positionKey]
   frame:SetPoint(pos.point or "CENTER", UIParent, pos.point or "CENTER", pos.x or 0, pos.y or 0)
   ApplyBackdrop(frame)
   frame:Hide()
@@ -254,7 +430,10 @@ function UI:CreateFrame()
   frame:SetScript("OnDragStop", function(self)
     self:StopMovingOrSizing()
     local point, _, _, x, y = self:GetPoint(1)
-    HB.profile.position = { point = point, x = x, y = y }
+    HB.profile[positionKey] = { point = point, x = x, y = y }
+  end)
+  frame:SetScript("OnHide", function()
+    if self.standaloneBank and self.bankOpen and not self.suppressBankClose and CloseBankFrame then CloseBankFrame() end
   end)
 
   local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
@@ -264,6 +443,25 @@ function UI:CreateFrame()
 
   local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
   close:SetPoint("TOPRIGHT", -3, -3)
+  close:SetScript("OnClick", function()
+    if self.standaloneBank and self.bankOpen and CloseBankFrame then CloseBankFrame() else self:Hide() end
+  end)
+
+  local bagsTab = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+  bagsTab:SetSize(72, 23)
+  bagsTab:SetPoint("TOPLEFT", 12, -39)
+  bagsTab:SetText("Bags")
+  bagsTab:SetScript("OnClick", function() self:SetSource("bags") end)
+  bagsTab:Hide()
+  self.bagsTab = bagsTab
+
+  local bankTab = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+  bankTab:SetSize(72, 23)
+  bankTab:SetPoint("LEFT", bagsTab, "RIGHT", 4, 0)
+  bankTab:SetText("Bank")
+  bankTab:SetScript("OnClick", function() self:SetSource("bank") end)
+  bankTab:Hide()
+  self.bankTab = bankTab
 
   local options = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
   options:SetSize(64, 23)
@@ -273,7 +471,7 @@ function UI:CreateFrame()
     if HB.Settings and HB.Settings.Open then HB.Settings:Open() end
   end)
 
-  local search = CreateFrame("EditBox", "HeliosBagsSearchBox", frame, "SearchBoxTemplate")
+  local search = CreateFrame("EditBox", frameName .. "SearchBox", frame, "SearchBoxTemplate")
   search:SetSize(210, 22)
   search:SetPoint("TOPLEFT", 12, -68)
   search:SetAutoFocus(false)
@@ -340,9 +538,28 @@ function UI:CreateFrame()
   self.content = content
 
   for i = 1, BUTTON_LIMIT do
-    self.buttons[i] = CreateItemButton(content, i)
+    self.buttons[i] = CreateItemButton(content, i, self, itemPrefix)
     self.buttons[i]:Hide()
   end
+end
+
+function UI:CreateBankView()
+  local view = setmetatable({
+    source = "bank",
+    search = "",
+    layoutFrozen = false,
+    merchantOpen = false,
+    bankOpen = false,
+    tradeOpen = false,
+    sendMailOpen = false,
+    standaloneBank = true,
+    positionKey = "bankPosition",
+    buttons = {},
+    headers = {},
+    rowSeparators = {},
+  }, { __index = UI })
+  view:CreateFrame("HeliosBagsBankFrame", "HeliosBagsBankItem")
+  self.bankView = view
 end
 
 function UI:HookBags()
@@ -352,23 +569,47 @@ function UI:HookBags()
     driver:Hide()
     local action = self.pendingBagAction
     self.pendingBagAction = nil
-    if CloseAllBags then CloseAllBags() end
-    if action == "toggle" then
+    self:CloseVanillaBags()
+    if action == "bank" then
+      if self.bankOpen then
+        self.bankView.bankOpen = true
+        self.bankView.source = "bank"
+        self.bankView:Show()
+      end
+    elseif action == "toggle" then
       if self.frame:IsShown() then self:Hide() else self:Show() end
     elseif action == "open" and not self.frame:IsShown() then
       self:Show()
     end
   end)
 
-  local function Hook(name, action)
+  local lastInventoryBag = NUM_BAG_SLOTS or 4
+
+  local function IsInventoryBag(bagID)
+    return type(bagID) ~= "number" or bagID >= 0 and bagID <= lastInventoryBag
+  end
+
+  local function Hook(name, action, inventoryOnly)
     if _G[name] then
-      hooksecurefunc(name, function() self:QueueBagAction(action) end)
+      hooksecurefunc(name, function(bagID)
+        if self.handlingBagAction then return end
+        if inventoryOnly and not IsInventoryBag(bagID) then
+          if self.bankOpen then self:QueueBagAction("bank") end
+        else
+          self:QueueBagAction(action)
+        end
+      end)
     end
   end
 
-  local function HookToggle(name)
+  local function HookToggle(name, inventoryOnly)
     if not _G[name] then return end
-    hooksecurefunc(name, function()
+    hooksecurefunc(name, function(bagID)
+      if self.handlingBagAction then return end
+      if inventoryOnly and not IsInventoryBag(bagID) then
+        if self.bankOpen then self:QueueBagAction("bank") end
+        return
+      end
       local stack = debugstack and debugstack() or ""
       if string.find(stack, "OpenAllBags", 1, true)
         or string.find(stack, "CloseAllBags", 1, true)
@@ -384,23 +625,24 @@ function UI:HookBags()
   Hook("OpenAllBags", "open")
   HookToggle("ToggleBackpack")
   Hook("OpenBackpack", "open")
-  HookToggle("ToggleBag")
-  Hook("OpenBag", "open")
+  HookToggle("ToggleBag", true)
+  Hook("OpenBag", "open", true)
 end
 
 function UI:QueueBagAction(action)
-  if action == "toggle" or not self.pendingBagAction then self.pendingBagAction = action end
+  if action == "bank" or action == "toggle" or not self.pendingBagAction then self.pendingBagAction = action end
   self.bagHookDriver:Show()
 end
 
 function UI:Show()
-  if CloseAllBags then CloseAllBags() end
+  self:CloseVanillaBags()
   HB.Categories:ClearExpiredRecent()
-  HB.Inventory:Scan()
+  if self.source == "bank" and self.bankOpen then HB.Inventory:ScanBank() else self.source = "bags" HB.Inventory:Scan() end
   self.frame:Show()
   self.layoutFrozen = false
   self:Refresh(true)
   self.layoutFrozen = true
+  self:UpdateBankTabs()
 end
 
 function UI:Hide()
@@ -459,7 +701,8 @@ function UI:GetCategorizedItems()
   local result = {}
   local recentRemaining = {}
 
-  for _, item in ipairs(HB.Inventory:GetItems()) do
+  local items = self.source == "bank" and HB.Inventory:GetBankItems() or HB.Inventory:GetItems()
+  for _, item in ipairs(items) do
     if not HB.profile.categoryView then
       result[#result + 1] = { item = item, category = "All Items" }
     elseif item.empty then
@@ -467,7 +710,7 @@ function UI:GetCategorizedItems()
     else
       local baseCategory = HB.Categories:GetCategory(item)
       local recentCount = 0
-      if HB.Categories:CanBeRecent(item) then
+      if self.source == "bags" and HB.Categories:CanBeRecent(item) then
         if recentRemaining[item.itemID] == nil then
           recentRemaining[item.itemID] = HB.Categories:GetRecentQuantity(item.itemID)
         end
@@ -507,24 +750,14 @@ function UI:GetGroupedItems()
       if item.empty then
         aggregated[category] = aggregated[category] or {}
         if not aggregated[category].emptySlots then
-          aggregated[category].emptySlots = { empty = true, count = 0 }
+          aggregated[category].emptySlots = CopyItemCount(item, 0)
           groups[category][#groups[category] + 1] = aggregated[category].emptySlots
         end
         aggregated[category].emptySlots.count = aggregated[category].emptySlots.count + 1
       else
-        aggregated[category] = aggregated[category] or {}
-        local itemKey = item.link or tostring(item.itemID or item.name or #groups[category] + 1)
-        local key = category .. "\031" .. itemKey
-        local displayItem = aggregated[category][key]
-        if not displayItem then
-          displayItem = CopyItemCount(item, 0)
-          displayItem.stacks = {}
-          displayItem.groupKey = key
-          aggregated[category][key] = displayItem
-          groups[category][#groups[category] + 1] = displayItem
-        end
-        displayItem.count = displayItem.count + (item.count or 1)
-        displayItem.stacks[#displayItem.stacks + 1] = { bag = item.bag, slot = item.slot, count = item.count or 1 }
+        local displayItem = CopyItemCount(item, item.count or 1)
+        displayItem.groupKey = category .. "\031" .. tostring(item.bag) .. ":" .. tostring(item.slot)
+        groups[category][#groups[category] + 1] = displayItem
       end
     end
   end
@@ -581,7 +814,7 @@ end
 
 function UI:GetLiveGroupedItems()
   local live = {}
-  local emptyCount = 0
+  local emptySummary
   local totalGroups = 0
   local totalQuantity = 0
   local grouped, order = self:GetGroupedItems()
@@ -593,7 +826,7 @@ function UI:GetLiveGroupedItems()
         totalQuantity = totalQuantity + (item.empty and 0 or item.count or 1)
         if not self:IsCategoryCollapsed(category) then
           if item.empty then
-            emptyCount = item.count or 0
+            emptySummary = item
           else
             item.category = category
             live[item.groupKey] = item
@@ -602,11 +835,11 @@ function UI:GetLiveGroupedItems()
       end
     end
   end
-  return live, emptyCount, totalGroups, totalQuantity
+  return live, emptySummary, totalGroups, totalQuantity
 end
 
 function UI:RefreshFrozenItems()
-  local live, emptyCount, totalGroups, totalQuantity = self:GetLiveGroupedItems()
+  local live, emptySummary, totalGroups, totalQuantity = self:GetLiveGroupedItems()
   local displayed = {}
 
   for _, button in ipairs(self.buttons) do
@@ -630,7 +863,7 @@ function UI:RefreshFrozenItems()
           self:RenderButton(button, { empty = true, frozen = true })
         end
       elseif button.isEmptySummary then
-        self:RenderButton(button, { empty = true, count = emptyCount })
+        self:RenderButton(button, emptySummary or { empty = true, count = 0 })
       end
     end
   end
@@ -779,6 +1012,6 @@ function UI:Refresh(forceLayout)
   self.status:SetText(totalGroups .. " groups  •  " .. totalQuantity .. " items")
   self:UpdateMoney()
   self:UpdateFooter()
-  self.title:SetText("HeliosBags " .. HB.version .. " — Bags")
+  self.title:SetText("HeliosBags " .. HB.version .. (self.source == "bank" and " — Bank" or " — Bags"))
   self.layoutFrozen = true
 end
