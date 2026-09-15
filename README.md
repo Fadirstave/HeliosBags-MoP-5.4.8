@@ -1,4 +1,4 @@
-# HeliosBags 1.8.1-alpha
+# HeliosBags 1.8.2-alpha
 
 HeliosBags is a clean, modern bag addon made for TwinStar Helios and World of Warcraft 5.4.8.
 
@@ -10,6 +10,7 @@ It puts your items into easy-to-read categories so you can spend less time diggi
 - Automatically sorts items into useful categories
 - Gives your bank its own matching organized window
 - Shows the main bank and every bank bag together
+- Lets you equip, replace, and purchase bank bags
 - Lets you search for items instantly
 - Keeps newly collected items in a temporary Recent section
 - Marks quest items and items that start quests

@@ -4,6 +4,36 @@ HB.UI = UI
 HB:RegisterModule("UI", UI)
 
 local BUTTON_LIMIT = 220
+local BANK_BAG_FIRST = (NUM_BAG_SLOTS or 4) + 1
+local BANK_BAG_COUNT = NUM_BANKBAGSLOTS or 7
+
+local function GetNextBankSlotCost()
+  if not GetBankSlotCost then return 0 end
+  local purchased = GetNumBankSlots and GetNumBankSlots() or 0
+  local ok, cost = pcall(GetBankSlotCost, purchased)
+  if ok and type(cost) == "number" then return cost end
+  ok, cost = pcall(GetBankSlotCost)
+  return ok and type(cost) == "number" and cost or 0
+end
+
+local function GetMoneyText(amount)
+  if GetCoinTextureString then return GetCoinTextureString(amount or 0) end
+  if GetMoneyString then return GetMoneyString(amount or 0, true) end
+  return tostring(amount or 0)
+end
+
+StaticPopupDialogs.HELIOSBAGS_BUY_BANK_SLOT = {
+  text = "Purchase another bank bag slot for %s?",
+  button1 = YES,
+  button2 = NO,
+  OnAccept = function()
+    if PurchaseSlot then PurchaseSlot() end
+  end,
+  timeout = 0,
+  whileDead = true,
+  hideOnEscape = true,
+  preferredIndex = 3,
+}
 
 local function ApplyBackdrop(frame)
   local profile = HB.profile
@@ -359,6 +389,93 @@ function UI:UpdateMoney()
   else self.money:SetText(tostring(amount)) end
 end
 
+function UI:CreateBankBagSlots()
+  self.bankBagSlotTexture = GetInventorySlotInfo and select(2, GetInventorySlotInfo("Bag1")) or "Interface\\PaperDoll\\UI-PaperDoll-Slot-Bag"
+  local label = self.frame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  label:SetPoint("BOTTOMLEFT", 13, 45)
+  self.bankBagLabel = label
+  self.bankBagSlots = {}
+
+  for index = 1, BANK_BAG_COUNT do
+    local button = CreateFrame("Button", "HeliosBagsBankBagSlot" .. index, self.frame, "ItemButtonTemplate")
+    button:SetID(index)
+    button:SetSize(32, 32)
+    button:SetPoint("BOTTOMLEFT", 12 + (index - 1) * 35, 9)
+    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    button:RegisterForDrag("LeftButton")
+    button:SetNormalTexture(nil)
+    button.itemBorder = CreateEdgeBorder(button, button:GetFrameLevel() + 3, 0, 2)
+    button.purchaseText = button:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    button.purchaseText:SetPoint("CENTER")
+    button.purchaseText:SetText("+")
+    button:SetScript("OnClick", function(slot)
+      if not self.bankOpen then return end
+      if slot.needPurchase then
+        StaticPopup_Show("HELIOSBAGS_BUY_BANK_SLOT", GetMoneyText(GetNextBankSlotCost()))
+      elseif CursorHasItem() then
+        PutItemInBag(slot.inventorySlot)
+      else
+        PickupBagFromSlot(slot.inventorySlot)
+      end
+    end)
+    button:SetScript("OnDragStart", function(slot)
+      if self.bankOpen and not slot.needPurchase then PickupBagFromSlot(slot.inventorySlot) end
+    end)
+    button:SetScript("OnReceiveDrag", function(slot)
+      if self.bankOpen and not slot.needPurchase then PutItemInBag(slot.inventorySlot) end
+    end)
+    button:SetScript("OnEnter", function(slot)
+      GameTooltip:SetOwner(slot, "ANCHOR_RIGHT")
+      if slot.needPurchase then
+        GameTooltip:SetText("Purchase bank bag slot")
+        GameTooltip:AddLine(GetMoneyText(GetNextBankSlotCost()), 1, 1, 1)
+        GameTooltip:AddLine("Click to unlock the next slot.", 0.75, 0.82, 0.90)
+      elseif not GameTooltip:SetInventoryItem("player", slot.inventorySlot) then
+        GameTooltip:SetText("Empty bank bag slot")
+        GameTooltip:AddLine("Drag a bag here to equip it.", 0.75, 0.82, 0.90)
+      end
+      GameTooltip:Show()
+    end)
+    button:SetScript("OnLeave", GameTooltip_Hide)
+    self.bankBagSlots[index] = button
+  end
+
+  self:UpdateBankBagSlots()
+end
+
+function UI:UpdateBankBagSlots()
+  if not self.bankBagSlots then return end
+  local purchased = GetNumBankSlots and GetNumBankSlots() or 0
+  self.bankBagLabel:SetText("Bank Bags  |cff8296a8" .. purchased .. "/" .. BANK_BAG_COUNT .. "|r")
+
+  for index, button in ipairs(self.bankBagSlots) do
+    local inventorySlot = BankButtonIDToInvSlotID and BankButtonIDToInvSlotID(index)
+    local bagID = BANK_BAG_FIRST + index - 1
+    local unlocked = index <= purchased
+    local texture = inventorySlot and GetInventoryItemTexture("player", inventorySlot)
+    local quality = inventorySlot and GetInventoryItemQuality("player", inventorySlot)
+    local free = unlocked and GetContainerNumFreeSlots and GetContainerNumFreeSlots(bagID) or 0
+    button.inventorySlot = inventorySlot
+    button.needPurchase = not unlocked
+    button.purchaseText:SetShown(not unlocked)
+    SetItemButtonTexture(button, texture or self.bankBagSlotTexture)
+    SetItemButtonCount(button, unlocked and free or 0)
+    local icon = button.icon or button.IconTexture or _G[button:GetName() .. "IconTexture"]
+    if unlocked then
+      if icon then icon:SetVertexColor(texture and 1 or 0.45, texture and 1 or 0.45, texture and 1 or 0.45) end
+      if quality and quality > 1 then
+        local red, green, blue = GetItemQualityColor(quality)
+        button.itemBorder:SetColor(red, green, blue, 1)
+      else
+        button.itemBorder:SetColor(0.38, 0.40, 0.43, 0.95)
+      end
+    else
+      if icon then icon:SetVertexColor(0.45, 0.08, 0.08) end
+      button.itemBorder:SetColor(0.65, 0.12, 0.12, 1)
+    end
+  end
+end
+
 function UI:ApplyAppearance()
   if self.frame then ApplyBackdrop(self.frame) end
   if self.bankView and self.bankView.frame then ApplyBackdrop(self.bankView.frame) end
@@ -559,6 +676,7 @@ function UI:CreateBankView()
     rowSeparators = {},
   }, { __index = UI })
   view:CreateFrame("HeliosBagsBankFrame", "HeliosBagsBankItem")
+  view:CreateBankBagSlots()
   self.bankView = view
 end
 
@@ -869,6 +987,7 @@ function UI:RefreshFrozenItems()
   end
   self.status:SetText(totalGroups .. " groups  •  " .. totalQuantity .. " items")
   self:UpdateFooter()
+  self:UpdateBankBagSlots()
 end
 
 function UI:GetHeader(index)
@@ -1001,7 +1120,7 @@ function UI:Refresh(forceLayout)
   local contentHeight = math.max(1, -y + 5)
   local contentWidth = math.max(420, targetWidth + xPad)
   local frameWidth = math.max(450, contentWidth + 20)
-  local frameHeight = math.max(234, contentHeight + 136)
+  local frameHeight = math.max(234, contentHeight + (self.standaloneBank and 188 or 136))
   local availableHeight = UIParent:GetHeight() - 140
   local availableFrameWidth = UIParent:GetWidth() - 50
   local fitScale = math.min(HB.profile.scale, availableHeight / frameHeight, availableFrameWidth / frameWidth)
@@ -1012,6 +1131,7 @@ function UI:Refresh(forceLayout)
   self.status:SetText(totalGroups .. " groups  •  " .. totalQuantity .. " items")
   self:UpdateMoney()
   self:UpdateFooter()
+  self:UpdateBankBagSlots()
   self.title:SetText("HeliosBags " .. HB.version .. (self.source == "bank" and " — Bank" or " — Bags"))
   self.layoutFrozen = true
 end

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.2-alpha - 2026-09-15
+
+- Added bank-bag slots to the Helios bank window
+- Bank bags can now be equipped, replaced, and removed
+- Locked bank-bag slots can now be purchased without disabling HeliosBags
+
 ## 1.8.1-alpha - 2026-09-14
 
 - Added a separate HeliosBags bank window
