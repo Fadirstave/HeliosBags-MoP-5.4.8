@@ -1,57 +1,45 @@
 # HeliosBags 1.8.1-alpha
 
-HeliosBags is a unified inventory addon for the TwinStar Helios Mists of Pandaria 5.4.8 client.
+HeliosBags is a clean, modern bag addon made for TwinStar Helios and World of Warcraft 5.4.8.
 
-## Features
+It puts your items into easy-to-read categories so you can spend less time digging through bags.
 
-- Compact category-based inventory window
-- Configurable icon size, spacing, scale, width, and category order
-- Dark UI mode with optional neutral background styling
-- Adjustable background transparency
-- Live item and category search with clear and keyboard controls
-- Collapsible built-in and custom category sections
-- Separate physical stacks and a compact empty-slot summary
-- Quantity-aware Recent items that return to their normal categories automatically
-- Configurable Recent-item duration
-- Quest-start and quest-item markers
-- Dedicated Hearthstones section
-- Character inventory snapshots and account-wide totals
-- Live currency display
-- Vendor junk selling
-- Secure use support for targeted consumables
-- Drag-and-drop support for action bars, item movement, and deletion
-- Shift-click stack splitting with the native amount selector
-- Native equipped-item comparisons while holding Shift over gear
-- Context-aware right-click transfers for banks, trades, mail, and vendors
-- Standard Escape-key closing behavior
-- Dedicated categorized bank window while interacting with a banker
-- Main-bank and purchased-bank-bag contents shown automatically
-- Clean item icons with thicker quality-colored borders
-- Stable item positions while selling
-- Backpack and equipped-bag button integration
+## What It Does
+
+- Shows all your bags in one organized window
+- Automatically sorts items into useful categories
+- Gives your bank its own matching organized window
+- Shows the main bank and every bank bag together
+- Lets you search for items instantly
+- Keeps newly collected items in a temporary Recent section
+- Marks quest items and items that start quests
+- Lets you collapse, move, and create categories
+- Sells all gray junk to vendors with one button
+- Supports dragging, splitting stacks, and right-click transfers
+- Shows equipped-item comparisons while holding Shift
+- Displays your money and item totals
+- Includes adjustable size, spacing, colors, and transparency
 
 ## Commands
 
-- `/hb` opens or closes the inventory
-- `/hb config` opens the main settings panel
+- `/hb` opens or closes your bags
+- `/hb config` opens the settings
 - `/hb categories` opens category management
-- `/hb reset` restores the default window position
-- `/hb debug` reports the loaded version and module status
-
-Click the arrow beside any category name to collapse or expand that section. Category states are saved between sessions. Searching temporarily expands all matching sections.
+- `/hb reset` resets the bag and bank positions
+- `/hb debug` checks whether the addon loaded correctly
 
 ## Installation
 
-1. Exit World of Warcraft.
-2. Copy the `HeliosBags` folder into `World of Warcraft/Interface/AddOns/`.
-3. Start the Helios client and enable HeliosBags on the AddOns screen.
+1. Close World of Warcraft.
+2. Place the `HeliosBags` folder inside `World of Warcraft/Interface/AddOns/`.
+3. Start the game and enable HeliosBags from the AddOns menu.
 
 ## Compatibility
 
-- World of Warcraft 5.4.8
-- Interface version 50400
 - TwinStar Helios
+- World of Warcraft 5.4.8
+- Interface 50400
 
 ## License
 
-MIT License. See `LICENSE` for details.
+HeliosBags is available under the MIT License.
